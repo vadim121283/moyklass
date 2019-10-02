@@ -1,0 +1,39 @@
+{
+  "name": "moyklass",
+  "version": "0.1.0",
+  "description": "moyklass",
+  "author": {
+    "name": "Vadim Akhmatov",
+    "email": "vadim121283@gmail.com"
+  },
+  "license": "MIT",
+  "directories": {
+    "lib": "./app/controllers",
+    "test": "./test"
+  },
+  "scripts": {
+    "start": "node --harmony index.js",
+    "test": "node --harmony ./node_modules/jasmine-node/lib/jasmine-node/cli.js spec"
+  },
+  "dependencies": {
+    "config": ">=3.1.0",
+    "koa": ">=2.7.0",
+    "koa-body": ">=4.1.0",
+    "koa-router": ">=7.4.0",
+    "optimist": ">=0.6.1",
+    "pg": "^7.12.1",
+    "prom-client": ">=11.3.0",
+    "prometheus-gc-stats": ">=0.6.1",
+    "sequelize": "^5.2.7",
+    "sequelize-cli": "^5.4.0",
+    "to-time": "git://github.com/ApelSYN/to-time.git"
+  },
+  "devDependencies": {
+    "frisby": "^0.8.5",
+    "get-port": "^3.0.0",
+    "jasmine-node": "*"
+  },
+  "engines": {
+    "node": ">=8"
+  }
+}
