@@ -9,30 +9,22 @@ const Op = Sequelize.Op;
 async function list (ctx, next) {
     let lessons = [];
 
-    //console.log(models.sequelize.col);
-
     // Check param
     console.log(ctx.request.query);
     if (ctx.request.query) {
 
         let param = ctx.request.query;
 
+        // Bag if use limit & include COUNT
+        // subQuery: false OR separate: true part resolve
         let query = {
-            attributes: {
-                include: [[Sequelize.fn("COUNT", Sequelize.col("Students.id")), "studentsCount"]]
-            },
             where : {},
             limit: 5,
-            // В библиотеке БАГ, из-за которого не работают вместе limit и COUNT
-            // из-за subQuery будут жесткие проблемы с Pagination
-            subQuery: false,
             include: [
                 {
-                    // Можно применить, если было отношение hasMany - separate: true
                 model: models.Student
                 }
                 ],
-            group: ['Lesson.id', "Teachers.id", "Teachers->lesson_teachers.teacher_id", "Teachers->lesson_teachers.lesson_id", 'Students.id', 'Students->LessonStudents.visit', 'Students->LessonStudents.lesson_id', 'Students->LessonStudents.student_id']
         };
 
         if (param.date) {
@@ -85,6 +77,8 @@ async function list (ctx, next) {
             );
         }
 
+        // Count filter NOT work with limit
+        // Its BAG in library
         if (param.studentsCount) {
 
         }
@@ -127,33 +121,56 @@ async function list (ctx, next) {
     lessons.forEach(function(item, index, array) {
         lessonsIds.push(item.id);
     });
-    console.log(lessonsIds);
-
     // Count Lesson Students
-    let lessonStudents = await models.LessonStudents.findAll({
-        where: {
-            'visit': true,
-            'lesson_id': {
-                [Op.in]: lessonsIds
-            },
-        }
-    });
+    // Load All
+    let lessonStudents = [];
+    try {
+        lessonStudents = await models.LessonStudents.findAll({
+            where: {
+                'lesson_id': {
+                    [Op.in]: lessonsIds
+                },
+            }
+        });
+    } catch (err) {
+        // todo Error
+        console.log(err);
+    }
+    // Make arr with Ids
     let counts = lessonsIds.map(function(item) {
-        return {lesson_id: item, visit_count: 0};
+        return {lesson_id: item, visit_count: 0, students_count: 0};
     });
+    // Count visit & students
     lessonStudents.forEach(function(item, index, array) {
         let i = counts.findIndex(i2 => item.LessonId === i2.lesson_id);
-        counts[i].visit_count++;
+        if (item.visit === true) counts[i].visit_count++;
+        counts[i].students_count++;
     });
-    console.log(counts);
+    //console.log(counts);
 
-    //console.log(ctx.request.url);
+    // Prepare body
+    let body = [];
+    lessons.forEach(function(item, index, array) {
+        // todo Can model func use
+        let students = item["Students"].map(function(item) {
+            return {id: item.id, name: item.name, visit: item["LessonStudents"].visit};
+        });
+        let teachers = item["Teachers"].map(function(item) {
+            return {id: item.id, name: item.name};
+        });
+        console.log(item["Students"][0]);
+        body.push({
+            "id": item.id,
+            "date": item.date,
+            "title": item.title,
+            "status": item.status,
+            "visitCount": counts.find(i2 => item.id === i2.lesson_id).visit_count,
+            "students": students,
+            "teachers": teachers,
+        });
+    });
 
-    /*let body = {
-        id: lessons[1]
-    };*/
-
-    ctx.body = lessons;
+    ctx.body = body;
     await next();
 }
 
