@@ -1,6 +1,7 @@
 const models = require('../models');
 const Sequelize = models.Sequelize;
 const Op = Sequelize.Op;
+const { round } = require('mathjs');
 
 /**
  * @example curl -XGET "http://localhost:8081/"
@@ -13,6 +14,7 @@ async function list (ctx, next) {
     console.log(ctx.request.query);
     if (ctx.request.query) {
 
+        // todo check valid param
         let param = ctx.request.query;
 
         // Bag if use limit & include COUNT
@@ -108,8 +110,12 @@ async function list (ctx, next) {
         try {
             lessons = await models.Lesson.findAll(query);
         } catch (err) {
-            // todo Error
             console.log(err);
+            ctx.body = {
+                message: err.message
+            };
+            ctx.status = 400;
+            await next();
         }
 
     } else {
@@ -133,8 +139,12 @@ async function list (ctx, next) {
             }
         });
     } catch (err) {
-        // todo Error
         console.log(err);
+        ctx.body = {
+            message: err.message
+        };
+        ctx.status = 400;
+        await next();
     }
     // Make arr with Ids
     let counts = lessonsIds.map(function(item) {
@@ -146,12 +156,10 @@ async function list (ctx, next) {
         if (item.visit === true) counts[i].visit_count++;
         counts[i].students_count++;
     });
-    //console.log(counts);
 
     // Prepare body
     let body = [];
     lessons.forEach(function(item, index, array) {
-        // todo Can model func use
         let students = item["Students"].map(function(item) {
             return {id: item.id, name: item.name, visit: item["LessonStudents"].visit};
         });
@@ -175,26 +183,153 @@ async function list (ctx, next) {
 }
 
 /**
- * @example curl -XPOST "http://localhost:8081/lesson" -d '{"title":"New Lesson 1"}' -H 'Content-Type: application/json'
+ * @example curl -XPOST "http://localhost:8081/lesson" -d '{
+	"teacherIds": [1,3],
+	"title": "Test Lesson",
+	"days": [4,6],
+	"firstDate": "2019-10-03",
+	"lessonCount": 10
+}' -H 'Content-Type: application/json'
  */
 async function createLesson (ctx, next) {
-    //let body = await Joi.validate(ctx.request.body, userSchema, {allowUnknown: true});
-    //ctx.body = await myDb.setNewId(body.name);
-    try {
-        const lesson = await models.Lesson.create({id: 11, date: '2019-10-02', title: 'Test Lesson', status: 1 });
-        console.log('LessonCreate: ' + JSON.stringify(lesson));
-        ctx.status = 201;
-        await next();
-    } catch (err) {
-        console.log('Error LessonCreate');
+    let lesson = ctx.request.body;
+    //console.log(JSON.stringify(lesson));
 
-        let body = {
+    if (!lesson.teacherIds || !lesson.title || !lesson.firstDate) {
+        console.log('Wrong param');
+        ctx.status = 400;
+        ctx.body = {Err: 'Wrong param'};
+        return;
+    }
+
+    if (!lesson.days) {
+        lesson.days = [0,1,2,3,4,5,6];
+    } else {
+        // Check arr
+        function unique(arr) {
+            let result = [];
+            for (let str of arr) {
+                if (!result.includes(str)) {
+                    result.push(str);
+                }
+            }
+            return result;
+        }
+        lesson.days = unique(lesson.days);
+        lesson.days = lesson.days.filter(item => /^[0-6]$/.test(item));
+        lesson.days.sort();
+        console.log(lesson.days);
+    }
+
+    let lessonCount = 0;
+    if (lesson.lessonCount || lesson.lastDate) {
+        let lessonDays = 0;
+        if (lesson.lessonCount && lesson.lastDate) {
+            // count lessons from lastDate
+            let first = lesson.firstDate;
+            let last = lesson.lastDate;
+            if (lesson.lastDate < lesson.firstDate) {
+                first = lesson.lastDate;
+                last = lesson.firstDate;
+                // Change dates
+                lesson.lastDate = last;
+                lesson.firstDate = first;
+            }
+            // No more 1 year
+            let year1 = first + (365 * 24 * 60 * 60 * 1000);
+            if (last > year1) last = year1;
+
+            // days between dates
+            let days = round((last-first)/(1000*60*60*24));
+
+            // lessons between 2 dates
+            lessonDays = lesson.days.length*days/7;
+
+            // What is more
+            if (lesson.lessonCount >= lessonDays) {
+                lessonCount = lessonDays;
+            } else {
+                lessonCount = lesson.lessonCount;
+            }
+        } else if (lesson.lastDate) {
+            let first = lesson.firstDate;
+            let last = lesson.lastDate;
+            if (lesson.lastDate < lesson.firstDate) {
+                first = lesson.lastDate;
+                last = lesson.firstDate;
+                // Change dates
+                lesson.lastDate = last;
+                lesson.firstDate = first;
+            }
+            // No more 1 year
+            let year1 = first + (365 * 24 * 60 * 60 * 1000);
+            if (last > year1) last = year1;
+
+            let days = round((last-first)/(1000*60*60*24));
+            lessonDays = lesson.days.length*days/7;
+            lessonCount = lessonDays;
+        } else if (lesson.lessonCount) {
+            lessonCount = lesson.lessonCount;
+        }
+    }
+    if (lessonCount*7/lesson.days.length > 365) {
+        lessonCount = lesson.days.length*52;
+    }
+    if (lessonCount > 300) lessonCount = 300;
+
+    // Create Query arr
+    let query = [];
+    // Добавляем один день, смотрим, есть такой день в массиве? Скинем в масссив.
+    let currentDay = new Date(lesson.firstDate);
+    while (lessonCount > 0) {
+        if (lesson.days.includes(currentDay.getDay())) {
+            query.push({
+                date: currentDay.toLocaleDateString('ru-RU'),
+                title: lesson.title
+            });
+            lessonCount--;
+        }
+        currentDay.setDate(currentDay.getDate() + 1);
+    }
+    //console.log(query);
+
+    // Teachers
+    let teachers = [];
+    try {
+        teachers = await models.Teacher.findAll({
+            where: { id: {
+                    [Op.in]: lesson.teacherIds
+                } }
+        });
+    } catch (err) {
+        console.log(err);
+        ctx.status = 400;
+        ctx.body = {
             message: err.message
         };
-        // will only respond with JSON
-        ctx.status = 400;
-        ctx.body = body
     }
+
+    // Query 1
+    let lessonsIds = [];
+    let lessons = [];
+    try {
+        lessons = await models.Lesson.bulkCreate(query);
+        lessons.forEach(function (item, index, array) {
+            item.setTeachers(teachers);
+            lessonsIds.push(item.id);
+        })
+
+    } catch (err) {
+        console.log(err);
+        ctx.status = 400;
+        ctx.body = {
+            message: err.message
+        };
+    }
+
+    ctx.body = lessonsIds;
+    ctx.status = 201;
+    await next();
 }
 
 module.exports = {list, createLesson};

@@ -7,7 +7,10 @@ module.exports = (sequelize, DataTypes) => {
         },
         date: {
             type: DataTypes.DATE,
-            allowNull: false
+            allowNull: false,
+            validate: {
+                isDate: true,
+            },
         },
         title: {
             type: DataTypes.STRING,
