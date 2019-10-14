@@ -1,17 +1,19 @@
 const models = require('../models');
 const Sequelize = models.Sequelize;
 const Op = Sequelize.Op;
-const { round } = require('mathjs');
+const {
+    round
+} = require('mathjs');
 
 /**
  * @example curl -XGET "http://localhost:8081/"
- * http://localhost:8081/?date=2019-09-01,2019-09-30&status=1&teacherIds=1,2,3&studentsCount=1,3&page=1&lessonPerPage=5
+ * http://localhost:8081/?date=2019-09-01,2019-09-30&status=1&teacherIds=1,2,3&page=1&lessonPerPage=5
  */
-async function list (ctx, next) {
+async function list(ctx, next) {
     let lessons = [];
 
     // Check param
-    console.log(ctx.request.query);
+    //console.log(ctx.request.query);
     if (ctx.request.query) {
 
         // todo check valid param
@@ -20,13 +22,11 @@ async function list (ctx, next) {
         // Bag if use limit & include COUNT
         // subQuery: false OR separate: true part resolve
         let query = {
-            where : {},
+            where: {},
             limit: 5,
-            include: [
-                {
+            include: [{
                 model: models.Student
-                }
-                ],
+            }],
         };
 
         if (param.date) {
@@ -61,28 +61,22 @@ async function list (ctx, next) {
 
         if (param.teacherIds) {
             let teachers = param.teacherIds.split(',');
-            for(let i = 0; i < teachers.length; i++) { teachers[i] = parseInt(teachers[i], 10); }
-            console.log(teachers);
-            query.include.push(
-                {
-                    model: models.Teacher,
-                    where: { id: {
+            for (let i = 0; i < teachers.length; i++) {
+                teachers[i] = parseInt(teachers[i], 10);
+            }
+            //console.log(teachers);
+            query.include.push({
+                model: models.Teacher,
+                where: {
+                    id: {
                         [Op.in]: teachers
-                        } }
+                    }
                 }
-            );
+            });
         } else {
-            query.include.push(
-                {
-                    model: models.Teacher,
-                }
-            );
-        }
-
-        // Count filter NOT work with limit
-        // Its BAG in library
-        if (param.studentsCount) {
-
+            query.include.push({
+                model: models.Teacher,
+            });
         }
 
         // Pagination
@@ -105,7 +99,7 @@ async function list (ctx, next) {
             }
         }
 
-        console.log(JSON.stringify(query.attributes));
+        //console.log(JSON.stringify(query.attributes));
         if (!query) query = {};
         try {
             lessons = await models.Lesson.findAll(query);
@@ -124,7 +118,7 @@ async function list (ctx, next) {
 
     // Collect lesson.ids
     let lessonsIds = [];
-    lessons.forEach(function(item, index, array) {
+    lessons.forEach(function (item, index, array) {
         lessonsIds.push(item.id);
     });
     // Count Lesson Students
@@ -147,11 +141,15 @@ async function list (ctx, next) {
         await next();
     }
     // Make arr with Ids
-    let counts = lessonsIds.map(function(item) {
-        return {lesson_id: item, visit_count: 0, students_count: 0};
+    let counts = lessonsIds.map(function (item) {
+        return {
+            lesson_id: item,
+            visit_count: 0,
+            students_count: 0
+        };
     });
     // Count visit & students
-    lessonStudents.forEach(function(item, index, array) {
+    lessonStudents.forEach(function (item, index, array) {
         let i = counts.findIndex(i2 => item.LessonId === i2.lesson_id);
         if (item.visit === true) counts[i].visit_count++;
         counts[i].students_count++;
@@ -159,14 +157,20 @@ async function list (ctx, next) {
 
     // Prepare body
     let body = [];
-    lessons.forEach(function(item, index, array) {
-        let students = item["Students"].map(function(item) {
-            return {id: item.id, name: item.name, visit: item["LessonStudents"].visit};
+    lessons.forEach(function (item, index, array) {
+        let students = item["Students"].map(function (item) {
+            return {
+                id: item.id,
+                name: item.name,
+                visit: item["LessonStudents"].visit
+            };
         });
-        let teachers = item["Teachers"].map(function(item) {
-            return {id: item.id, name: item.name};
+        let teachers = item["Teachers"].map(function (item) {
+            return {
+                id: item.id,
+                name: item.name
+            };
         });
-        console.log(item["Students"][0]);
         body.push({
             "id": item.id,
             "date": item.date,
@@ -191,19 +195,20 @@ async function list (ctx, next) {
 	"lessonCount": 10
 }' -H 'Content-Type: application/json'
  */
-async function createLesson (ctx, next) {
+async function createLesson(ctx, next) {
     let lesson = ctx.request.body;
-    //console.log(JSON.stringify(lesson));
 
     if (!lesson.teacherIds || !lesson.title || !lesson.firstDate) {
         console.log('Wrong param');
         ctx.status = 400;
-        ctx.body = {Err: 'Wrong param'};
+        ctx.body = {
+            Err: 'Wrong param'
+        };
         return;
     }
 
     if (!lesson.days) {
-        lesson.days = [0,1,2,3,4,5,6];
+        lesson.days = [0, 1, 2, 3, 4, 5, 6];
     } else {
         // Check arr
         function unique(arr) {
@@ -218,88 +223,49 @@ async function createLesson (ctx, next) {
         lesson.days = unique(lesson.days);
         lesson.days = lesson.days.filter(item => /^[0-6]$/.test(item));
         lesson.days.sort();
-        console.log(lesson.days);
     }
 
-    let lessonCount = 0;
-    if (lesson.lessonCount || lesson.lastDate) {
-        let lessonDays = 0;
-        if (lesson.lessonCount && lesson.lastDate) {
-            // count lessons from lastDate
-            let first = lesson.firstDate;
-            let last = lesson.lastDate;
-            if (lesson.lastDate < lesson.firstDate) {
-                first = lesson.lastDate;
-                last = lesson.firstDate;
-                // Change dates
-                lesson.lastDate = last;
-                lesson.firstDate = first;
-            }
-            // No more 1 year
-            let year1 = first + (365 * 24 * 60 * 60 * 1000);
-            if (last > year1) last = year1;
+    let firstDate = new Date(lesson.firstDate);
+    let lastDate = new Date(lesson.firstDate);
+    lastDate.setFullYear(lastDate.getFullYear() + 1);
+    if (lesson.lastDate) {
+        last = new Date(lesson.lastDate);
+        if (last < lastDate) {
+            lastDate = last;
+        }
+    }
 
-            // days between dates
-            let days = round((last-first)/(1000*60*60*24));
-
-            // lessons between 2 dates
-            lessonDays = lesson.days.length*days/7;
-
-            // What is more
-            if (lesson.lessonCount >= lessonDays) {
-                lessonCount = lessonDays;
-            } else {
-                lessonCount = lesson.lessonCount;
-            }
-        } else if (lesson.lastDate) {
-            let first = lesson.firstDate;
-            let last = lesson.lastDate;
-            if (lesson.lastDate < lesson.firstDate) {
-                first = lesson.lastDate;
-                last = lesson.firstDate;
-                // Change dates
-                lesson.lastDate = last;
-                lesson.firstDate = first;
-            }
-            // No more 1 year
-            let year1 = first + (365 * 24 * 60 * 60 * 1000);
-            if (last > year1) last = year1;
-
-            let days = round((last-first)/(1000*60*60*24));
-            lessonDays = lesson.days.length*days/7;
-            lessonCount = lessonDays;
-        } else if (lesson.lessonCount) {
+    let lessonCount = 300;
+    if (lesson.lessonCount) {
+        if (lesson.lessonCount < lessonCount) {
             lessonCount = lesson.lessonCount;
         }
     }
-    if (lessonCount*7/lesson.days.length > 365) {
-        lessonCount = lesson.days.length*52;
-    }
-    if (lessonCount > 300) lessonCount = 300;
+    //console.log(`FirstDate: ${firstDate} LastDate: ${lastDate} Count: ${lessonCount}`);
 
     // Create Query arr
     let query = [];
-    // Добавляем один день, смотрим, есть такой день в массиве? Скинем в масссив.
-    let currentDay = new Date(lesson.firstDate);
     while (lessonCount > 0) {
-        if (lesson.days.includes(currentDay.getDay())) {
+        if (lesson.days.includes(firstDate.getDay())) {
             query.push({
-                date: currentDay.toLocaleDateString('ru-RU'),
+                date: firstDate.toLocaleDateString('ru-RU'),
                 title: lesson.title
             });
             lessonCount--;
         }
-        currentDay.setDate(currentDay.getDate() + 1);
+        firstDate.setDate(firstDate.getDate() + 1);
+        if (firstDate > lastDate) break;
     }
-    //console.log(query);
 
     // Teachers
     let teachers = [];
     try {
         teachers = await models.Teacher.findAll({
-            where: { id: {
+            where: {
+                id: {
                     [Op.in]: lesson.teacherIds
-                } }
+                }
+            }
         });
     } catch (err) {
         console.log(err);
@@ -328,8 +294,12 @@ async function createLesson (ctx, next) {
     }
 
     ctx.body = lessonsIds;
+    //ctx.body = lessonsIds.length;
     ctx.status = 201;
     await next();
 }
 
-module.exports = {list, createLesson};
+module.exports = {
+    list,
+    createLesson
+};

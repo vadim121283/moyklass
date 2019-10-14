@@ -3,6 +3,7 @@
 /log/*.log
 /.idea
 /build
+/test
 /public/assets
 /public/uploads
 /*-compiled.js
@@ -10,3 +11,5 @@
 *-compiled.js
 *-compiled.js.map
 /.env.docker
+.vscode/launch.json
+db/migrations/data2.sql
