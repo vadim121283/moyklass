@@ -15,7 +15,7 @@ curl -XPOST "http://localhost:8081/lesson" -d '{
 ```
 ## Get
 ```
-curl -XGET "http://localhost:8081/?date=2019-09-01,2019-09-30&status=1&teacherIds=1,2,3&studentsCount=1,3&page=1&lessonPerPage=5"
+curl -XGET "http://localhost:8081/?date=2019-09-01,2019-09-30&status=1&teacherIds=1,2,3&page=1&lessonPerPage=5"
 ```
 
 # Тестовое задание
