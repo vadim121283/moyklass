@@ -30,7 +30,7 @@
     "to-time": "git://github.com/ApelSYN/to-time.git"
   },
   "devDependencies": {
-    "frisby": "^0.8.5",
+    "frisby": "^2.1.3",
     "get-port": "^3.0.0",
     "jasmine-node": "*"
   },
